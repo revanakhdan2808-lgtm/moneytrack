@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  name         String
+  email        String        @unique
+  password     String
+  categories   Category[]
+  products     Product[]
+  transactions Transaction[]
+  savings      Savings[]
+  createdAt    DateTime      @default(now())
+}
+
+model Category {
+  id           Int           @id @default(autoincrement())
+  name         String
+  type         String
+  userId       Int
+  user         User          @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+}
+
+model Product {
+  id           Int           @id @default(autoincrement())
+  name         String
+  purchasePrice Decimal      @db.Decimal(15, 2)
+  sellingPrice  Decimal      @db.Decimal(15, 2)
+  stock         Int          @default(0)
+  userId        Int
+  user          User         @relation(fields: [userId], references: [id])
+  transactions  Transaction[]
+  createdAt     DateTime     @default(now())
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  type        String
+  amount      Decimal  @db.Decimal(15, 2)
+  quantity    Int      @default(1)
+  description String?
+  date        DateTime @default(now())
+
+  userId      Int
+  categoryId  Int?
+  productId   Int?
+
+  user        User      @relation(fields: [userId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
+  product     Product?  @relation(fields: [productId], references: [id])
+
+  createdAt   DateTime  @default(now())
+}
+
+model Savings {
+  id          Int               @id @default(autoincrement())
+  name        String
+  target      Decimal           @db.Decimal(15, 2)
+  initial     Decimal           @default(0) @db.Decimal(15, 2)
+  userId      Int
+  user        User              @relation(fields: [userId], references: [id])
+  movements   SavingsMovement[]
+  createdAt   DateTime          @default(now())
+}
+
+model SavingsMovement {
+  id        Int      @id @default(autoincrement())
+  type      String
+  amount    Decimal  @db.Decimal(15, 2)
+  note      String?
+  date      DateTime @default(now())
+
+  savingsId Int
+  savings   Savings  @relation(fields: [savingsId], references: [id])
+}
