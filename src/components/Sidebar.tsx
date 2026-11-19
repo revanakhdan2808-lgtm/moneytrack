@@ -7,7 +7,7 @@ export default function Sidebar() {
 
       <nav className="menu">
         <Link href="/dashboard">Dashboard</Link>
-        <Link href="/transactions">Transaksi</Link>
+        <Link href="/transactions">Aktivitas</Link>
         <Link href="/products">Produk</Link>
         <Link href="/categories">Kategori</Link>
         <Link href="/savings">Tabungan</Link>

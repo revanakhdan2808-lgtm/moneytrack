@@ -4,12 +4,41 @@ import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Navbar from "@/components/Navbar";
 
-export default function Transactions() {
-  const [data, setData] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+type TransactionType = "INCOME" | "EXPENSE" | "PURCHASE" | "SALE";
 
-  const [type, setType] = useState("INCOME");
+type Category = {
+  id: number;
+  name: string;
+  type: TransactionType;
+};
+
+type Product = {
+  id: number;
+  name: string;
+  stock: number;
+  purchasePrice: number | string;
+  sellingPrice: number | string;
+};
+
+type Transaction = {
+  id: number;
+  type: TransactionType;
+  amount: number | string;
+  quantity: number;
+  description: string | null;
+  categoryId: number | null;
+  productId: number | null;
+  category?: Category | null;
+  product?: Product | null;
+};
+
+export default function Transactions() {
+  const [data, setData] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const [type, setType] = useState<TransactionType>("INCOME");
   const [amount, setAmount] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [description, setDescription] = useState("");
@@ -28,64 +57,87 @@ export default function Transactions() {
       return;
     }
 
-    setData(await transactions.json());
-    setCategories(await cats.json());
-    setProducts(await prods.json());
+    setData(await transactions.json() as Transaction[]);
+    setCategories(await cats.json() as Category[]);
+    setProducts(await prods.json() as Product[]);
   }
 
   useEffect(() => {
-    loadData();
+    void Promise.resolve().then(loadData);
   }, []);
 
-  async function addTransaction(e: React.FormEvent) {
+  function resetForm() {
+    setEditingId(null);
+    setType("INCOME");
+    setAmount("");
+    setQuantity("1");
+    setDescription("");
+    setCategoryId("");
+    setProductId("");
+  }
+
+  function editTransaction(item: Transaction) {
+    setEditingId(item.id);
+    setType(item.type);
+    setAmount(String(item.amount));
+    setQuantity(String(item.quantity));
+    setDescription(item.description ?? "");
+    setCategoryId(item.categoryId ? String(item.categoryId) : "");
+    setProductId(item.productId ? String(item.productId) : "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function saveTransaction(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const body: any = {
+    const isProductTransaction = type === "PURCHASE" || type === "SALE";
+    const body = {
       type,
       amount: Number(amount),
       description,
-      quantity: Number(quantity)
+      quantity: Number(quantity),
+      categoryId: isProductTransaction || !categoryId ? null : Number(categoryId),
+      productId: isProductTransaction ? Number(productId) : null
     };
 
-    if (type === "PURCHASE" || type === "SALE") {
-      body.productId = Number(productId);
-    } else if (categoryId) {
-      body.categoryId = Number(categoryId);
-    }
-
-    const res = await fetch("/api/transactions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
+    const res = await fetch(
+      editingId === null ? "/api/transactions" : `/api/transactions/${editingId}`,
+      {
+        method: editingId === null ? "POST" : "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+      }
+    );
 
     const result = await res.json();
-    alert(result.message || (res.ok ? "Transaksi berhasil ditambahkan" : "Gagal menyimpan"));
+    alert(result.message || (
+      res.ok
+        ? editingId === null ? "Aktivitas berhasil ditambahkan" : "Aktivitas berhasil diperbarui"
+        : "Gagal menyimpan aktivitas"
+    ));
 
     if (res.ok) {
-      setAmount("");
-      setDescription("");
-      setQuantity("1");
+      resetForm();
       loadData();
     }
   }
 
   async function deleteTransaction(id: number) {
-    if (!confirm("Yakin ingin menghapus transaksi?")) return;
+    if (!confirm("Yakin ingin menghapus aktivitas ini?")) return;
 
     const res = await fetch(`/api/transactions/${id}`, {
       method: "DELETE"
     });
 
     const result = await res.json();
-    alert(result.message);
+    alert(result.message || (res.ok ? "Aktivitas berhasil dihapus" : "Gagal menghapus aktivitas"));
 
     if (res.ok) loadData();
   }
 
-  const rupiah = (value: any) =>
+  const rupiah = (value: number | string) =>
     new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
@@ -99,17 +151,17 @@ export default function Transactions() {
       <main className="main">
         <Navbar />
 
-        <h2>Data Transaksi</h2>
+        <h2>Aktivitas Keuangan</h2>
         <p style={{ margin: "10px 0 25px" }}>
-          Kelola seluruh transaksi keuangan kamu.
+          Tambah, lihat, ubah, dan hapus aktivitas keuangan kamu.
         </p>
 
-        <form className="form" onSubmit={addTransaction}>
-          <h3>Tambah Transaksi</h3>
+        <form className="form" onSubmit={saveTransaction}>
+          <h3>{editingId === null ? "Tambah Aktivitas" : "Ubah Aktivitas"}</h3>
 
           <label>Jenis Transaksi</label>
           <select value={type} onChange={e => {
-            setType(e.target.value);
+            setType(e.target.value as TransactionType);
             setCategoryId("");
             setProductId("");
             setAmount("");
@@ -194,11 +246,18 @@ export default function Transactions() {
             placeholder="Contoh: Penjualan sepatu"
           />
 
-          <button className="btn">Simpan Transaksi</button>
+          <button className="btn">
+            {editingId === null ? "Simpan Aktivitas" : "Simpan Perubahan"}
+          </button>
+          {editingId !== null && (
+            <button type="button" className="btn" onClick={resetForm} style={{ marginLeft: 8 }}>
+              Batal
+            </button>
+          )}
         </form>
 
         <div className="table-box" style={{ marginTop: 25 }}>
-          <h3>Riwayat Transaksi</h3>
+          <h3>Daftar Aktivitas</h3>
 
           <table>
             <thead>
@@ -215,17 +274,22 @@ export default function Transactions() {
                 <tr key={item.id}>
                   <td>{item.type}</td>
                   <td>{rupiah(item.amount)}</td>
-                  <td>{item.description || item.product?.name || "-"}</td>
+                  <td>{item.description || item.product?.name || item.category?.name || "-"}</td>
                   <td>
-                    <button
-                      className="btn-danger"
-                      onClick={() => deleteTransaction(item.id)}
-                    >
+                    <button className="btn" onClick={() => editTransaction(item)} style={{ marginRight: 8 }}>
+                      Ubah
+                    </button>
+                    <button className="btn-danger" onClick={() => deleteTransaction(item.id)}>
                       Hapus
                     </button>
                   </td>
                 </tr>
               ))}
+              {data.length === 0 && (
+                <tr>
+                  <td colSpan={4}>Belum ada aktivitas.</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
